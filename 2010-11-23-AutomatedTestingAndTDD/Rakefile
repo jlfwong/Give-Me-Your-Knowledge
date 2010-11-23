@@ -62,6 +62,8 @@ def runtest(file)
   #     output      specifies the expected output to stdout
   #     return_val  specifies the expected return value of wain
   #
+  # NOTE: The return_val check does not work for negative numbers
+  #
   # See testcases/a9p1/err_return_c.yaml for an example of 
   # invalid wl input
   #

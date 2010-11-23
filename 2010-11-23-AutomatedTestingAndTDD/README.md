@@ -34,7 +34,7 @@ the MIPS assembler written for [CS241][] Assignments 3 and 4.
 **Automated Input, Automated Verification, Poor Reporting**
 
     ./asm < test.in > test.asm.out
-    ./asm < test.in > test.binasm.out
+    java cs241.binasm < test.in > test.binasm.out
     diff test.asm.out test.binasm.out
 
 *OR*
