@@ -1,0 +1,10 @@
+wl_input: |
+  int wain(int a, int b) { return b; }
+valid: true
+trials:
+  -
+    input: 4 5
+    return_val: 5
+  -
+    input: 5 4
+    return_val: 4

@@ -1,0 +1,177 @@
+require 'rubygems'
+require 'rainbow'
+require 'yaml'
+
+def runtrial(trial)
+  # Run an input against the MIPS executable
+
+  # Load the input into a temp/test.in
+  in_file = File.new("temp/test.in","w")
+  in_file.write(trial['input'])
+  in_file.close
+
+  # Load the expected output into temp/tes.tout
+  out_file = File.new("temp/test.out","w")
+  out_file.write(trial['output'])
+  out_file.close
+
+  # Run the mips executable with temp/test.in as input
+  #   test.stdout will contain the output of the execution
+  #   test.stderr will contain the error output of the execution
+  %x(java mips.twoints temp/test.mips \
+    < temp/test.in \
+    > temp/test.stdout \
+    2> temp/test.stderr
+  )
+
+  # Load the error output
+  stderr_contents = File.read('temp/test.stderr')
+
+  # Extract the contents of register 3 (the return value)
+  return_val = stderr_contents.match(/\$03 = 0x([0-9a-f]{8})/)[1].to_i(16)
+
+  # Compare the output with the expected output
+  %x(diff -y temp/test.out temp/test.stdout)
+
+  # Return the return value and the execution code ($?)
+  return [return_val,$?]
+end
+
+def runtest(file)
+  # Load a YAML test case, compile the wl file and execute it
+  # The format of these files is as follows:
+  #
+  #     wl_input: |
+  #       int wain(int a, int b) { return a; }
+  #     valid: true
+  #     trials:
+  #       -
+  #         input: 4 5
+  #         output: 
+  #         return_val: 4
+  #       -
+  #         input: 5 4
+  #         output:
+  #         return_val: 5
+  # 
+  # Where 
+  #   wl_input    is the .wl file to compile
+  #   trials      is the list of input trials for the mips file
+  #   valid       specifies whether the wl should compile or not
+  #     input       specifies the input case to send to java mips.twoints
+  #     output      specifies the expected output to stdout
+  #     return_val  specifies the expected return value of wain
+  #
+  # See testcases/a9p1/err_return_c.yaml for an example of 
+  # invalid wl input
+  #
+  # See http://www.yaml.org/spec/1.2/spec.html for more information
+  # on the YAML file format
+  
+  test_case = YAML::load(File.read(file))
+  wl_file = File.new("temp/test.wl","w")
+  wl_file.write(test_case['wl_input'])
+  wl_file.close
+
+  basename = File.basename(file)
+
+  # Scan
+  %x(java cs241.WLScan < temp/test.wl > temp/test.tokens)
+  if ($? != 0)
+    puts "ERROR: Scanner Failed on #{basename}".color(:yellow)
+    puts test_case['wl_input']
+    return
+  end
+
+  # Parse
+  %x(java cs241.WLParse < temp/test.tokens > temp/test.parsed)
+  if ($? != 0)
+    puts "ERROR: Parser Failed on #{basename}".color(:yellow)
+    puts test_case['wl_input']
+    return
+  end
+
+  # Code Gen
+  %x(./wlgen < temp/test.parsed > temp/test.asm 2> temp/test.generr)
+  generr_contents = File.read('temp/test.generr')
+
+  if ($? != 0)
+    if (test_case['valid'])
+      puts "ERROR: CodeGen Failed on #{basename}".color(:yellow)
+      puts generr_contents
+    else
+      if generr_contents =~ /^ERROR/
+        puts "PASSED: wlgen errored on #{basename} as expected".color(:green)
+      else
+        puts "ERROR: wlgen errored unexpectedly".color(:yellow)
+        puts generr_contents
+      end
+    end
+    return
+  elsif !test_case['valid']
+    puts "FAILED: #{basename} invalid but wlgen did not error".color(:red)
+    return
+  end
+
+  # Assembling
+  %x(java cs241.binasm < temp/test.asm > temp/test.mips 2> temp/test.asmerr)
+  if ($? != 0)
+    puts "FAILED: Invalid assembly for #{basename}".color(:yellow)
+    puts File.read("temp/test.asmerr").color(:yellow)
+    puts File.read("temp/test.asm")
+    return
+  end
+
+  test_case['trials'].each do |trial|
+    (return_val,diff_result) = runtrial(trial)
+    if return_val != trial['return_val']
+      puts "FAILED: Wrong return code for execution of #{basename}".color(:red)
+      puts "Expecting #{trial['return_val']}, Got #{return_val}"
+      return
+    elsif diff_result != 0
+      puts "FAILED: Incorrect output for #{basename}".color(:red)
+      return
+    end
+  end
+
+  puts "PASSED: All trials passed for #{basename}".color(:green)
+end
+
+task :test, :filepattern do |t,args|
+  # Run only tests specified by a certain pattern
+  # e.g. To run only test cases with err in the name, run
+  #     rake test[err]
+  FileList["testcases/*/*.yaml"].each do |file|
+    runtest(file) if file =~ /#{args[:filepattern]}/
+  end
+end
+
+task :batch, :set do |t,args|
+  # Run only tests in a specific folder
+  # e.g. To only run tests in the A9P2 folder, run
+  #     rake batch[A9P2]
+  puts args[:set].color(:blue)
+  puts ('=' * args[:set].length).color(:blue)
+  FileList["testcases/#{args[:set]}/*.yaml"].each do |file|
+    runtest(file)
+  end
+end
+
+task :default do
+  # Add to the below array when you want to add another folder to your testcases
+  # e.g. Change it to 
+  #   %w( A9P2 A9P1 )
+  # When you have test cases for A9P2
+  %w(
+    A9P1
+  ).each do |ap|
+    # Output blue header
+    puts ap.color(:blue)
+    puts ('=' * ap.length).color(:blue)
+
+    #
+    FileList["testcases/#{ap}/*.yaml"].each do |file|
+      runtest(file)
+    end
+  end
+end
