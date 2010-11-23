@@ -162,10 +162,10 @@ end
 task :default do
   # Add to the below array when you want to add another folder to your testcases
   # e.g. Change it to 
-  #   %w( A9P2 A9P1 )
-  # When you have test cases for A9P2
+  #   %w( a9p2 a9p1 )
+  # When you have test cases for a9p2
   %w(
-    A9P1
+    a9p1
   ).each do |ap|
     # Output blue header
     puts ap.color(:blue)
